@@ -18,7 +18,9 @@ sudo chmod u+x /bin/bs
 ```
 ### Check your project id
 > bs list projects 
-\or 
+
+or 
+
 > bs list run
 
 > bs download projects -id XXXX --exclude=* --include=*fastq.gz
