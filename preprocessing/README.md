@@ -6,6 +6,8 @@ transcriptomics field.
 
 ---
 
+## Download your fastq files from Illumina basespace
+
 Basespace cli download in the 
 [Basespace CLI messy site](https://developer.basespace.illumina.com/docs/content/documentation/cli/cli-overview)
 (The -O option doesn't work without mkdir before), this simplify the process: 
@@ -16,20 +18,25 @@ sudo chmod u+x /bin/bs
 ```
 ### Check your project id
 > bs list projects 
-or 
+\or 
 > bs list run
 
 > bs download projects -id XXXX --exclude=* --include=*fastq.gz
 
 ---
 
-### Manage the cDNA hg38 reference 
+## Download the reference and build the index
 
+Download the cDNA GRCh38 (release 112) from ensembl site:
 https://ftp.ensembl.org/pub/release-112/fasta/homo_sapiens/cdna/
 >wget https://ftp.ensembl.org/pub/release-112/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz
 
 Make the index based on transcripts file:
 >kallisto index -i Homo_sapiens.GRCh38.cdna.all.index Homo_sapiens.GRCh38.cdna.all.fa.gz
+
+---
+
+Run the scripts:
 
 1. 1_run_qc.sh
 2. 2_run_kallisto.sh
