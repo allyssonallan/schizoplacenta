@@ -4,7 +4,7 @@ library(matrixStats)
 library(cowplot)
 sampleLabels <- c(targetsnd$masctransM, targetsnd$masctranscRN)
 myDGEList <- DGEList(Txi_gene$counts)
-log2.cpm <- cpm(myDGEList, log=TRUE)
+log2.cpm <- cpm(myDGEList, log = TRUE)
 
 ### PCA plot
 
