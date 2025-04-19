@@ -4,6 +4,7 @@ A reproducible pipeline for analyzing placenta transcriptome data to investigate
 
 Project structure
 -----------------
+```
 .
 ├── preprocessing
 │   ├── 1_run_qc.sh          # FASTQ quality control using FastQC & MultiQC
@@ -23,6 +24,7 @@ Project structure
 ├── 6_Cog_Heatmaps.R         # Heatmaps for cognitive outcome DEGs
 ├── 7_Cog_WGCNA.R            # Weighted gene co-expression network analysis (WGCNA) for cognition
 └── README.md                # This file
+```
 
 Prerequisites
 -------------
