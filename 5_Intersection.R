@@ -7,7 +7,7 @@ library(tidyr)
 
 ### set env ###
 getwd()
-setwd("~/Documents/Dani/Transcriptoma/")
+setwd(here::here("Documents/Dani/Transcriptoma/"))
 
 # Read the data
 sex = read.csv("results_paper/tables/Supp_2_Sex_DEG.tsv", sep = "\t")

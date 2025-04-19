@@ -27,6 +27,22 @@ setwd("~/Documents/Dani/Transcriptoma/")
 
 ### load meta and pseudoalignment data ###
 targets <- data.table::fread("0_TableCode.tsv")
+# Metadata validation
+required_cols <- c("mascgenRN", "masctransM1", "masctranscRN1", "masctransM", "masctranscRN")
+missing_cols <- setdiff(required_cols, names(targets))
+if (length(missing_cols) > 0) stop(paste("Metadata is missing required columns:", paste(missing_cols, collapse=", ")))
+# Validate path and sample columns
+path_cols <- required_cols[-1]
+for (col in path_cols) {
+  if (!is.character(targets[[col]])) stop(paste("Column", col, "must be character"))
+  if (any(is.na(targets[[col]]) | targets[[col]] == "")) stop(paste("Column", col, "contains empty or NA values"))
+}
+# Validate numeric metadata columns if present
+num_cols <- intersect(c("QuantCRN", "QuantLRN", "QuantQRN"), names(targets))
+for (col in num_cols) {
+  if (!is.numeric(targets[[col]])) stop(paste("Column", col, "must be numeric"))
+  if (any(is.na(targets[[col]]))) stop(paste("Column", col, "contains NA values"))
+}
 targetsnd <- targets[!duplicated(targets$mascgenRN), ]
 pathM <- file.path(targetsnd$masctransM1, "abundance.h5")
 pathRN <- file.path(targetsnd$masctranscRN1, "abundance.h5")

@@ -16,6 +16,8 @@ wget "https://launch.basespace.illumina.com/CLI/latest/amd64-linux/bs"
 sudo mv bs /bin/bs
 sudo chmod u+x /bin/bs
 ```
+
+`Take care about your keys, use .env to host them`
 ### Check your project id
 > bs list projects 
 

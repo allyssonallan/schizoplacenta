@@ -24,10 +24,31 @@ library(gtable)
 
 ### set env ###
 getwd()
-setwd("~/Documents/Dani/Transcriptoma/")
+setwd(here::here("Documents/Dani/Transcriptoma/"))
 
 ### load meta and pseudoalignment data ###
 targets <- data.table::fread("0_TableCode.tsv")
+# Metadata validation
+required_cols <- c("mascgenRN", "masctransM1", "masctranscRN1", "masctransM", "masctranscRN")
+missing_cols <- setdiff(required_cols, names(targets))
+if (length(missing_cols) > 0) stop(paste("Metadata is missing required columns:", paste(missing_cols, collapse=", ")))
+# Validate path and sample columns
+path_cols <- required_cols[-1]
+for (col in path_cols) {
+  if (!is.character(targets[[col]])) stop(paste("Column", col, "must be character"))
+  if (any(is.na(targets[[col]]) | targets[[col]] == "")) stop(paste("Column", col, "contains empty or NA values"))
+}
+# Validate sex column if present
+if ("sex" %in% names(targets)) {
+  invalid_sex <- setdiff(unique(targets$sex), c("M", "F"))
+  if (length(invalid_sex) > 0) stop(paste("Invalid values in 'sex' column:", paste(invalid_sex, collapse=", ")))
+}
+# Validate numeric metadata columns if present
+num_cols <- intersect(c("QuantCRN", "QuantLRN", "QuantQRN"), names(targets))
+for (col in num_cols) {
+  if (!is.numeric(targets[[col]])) stop(paste("Column", col, "must be numeric"))
+  if (any(is.na(targets[[col]]))) stop(paste("Column", col, "contains NA values"))
+}
 targetsnd <- targets[!duplicated(targets$mascgenRN), ]
 pathM <- file.path(targetsnd$masctransM1, "abundance.h5")
 pathRN <- file.path(targetsnd$masctranscRN1, "abundance.h5")
@@ -108,13 +129,14 @@ ggplotly(pca.plot)
 log2.cpm.filtered.norm.df <- log2.cpm.filtered.norm.df[!duplicated(names(log2.cpm.filtered.norm.df))]
 male <- c(targetsnd$masctranscRN[targetsnd$sex == "M"], targetsnd$masctransM[targetsnd$sex == "M"])
 female <- c(targetsnd$masctranscRN[targetsnd$sex == "F"], targetsnd$masctransM[targetsnd$sex == "F"])
-male_concatenated <- paste(male, collapse = " + ")
-female_concatenated <- paste(female, collapse = " + ")
 
-mydata.df <- mutate(log2.cpm.filtered.norm.df,
-                    male.AVG = eval(parse(text = paste0("(", male_concatenated, ")/length(male)"))),
-                    female.AVG = eval(parse(text = paste0("(", female_concatenated, ")/length(female)"))),
-                    LogFC = (male.AVG - female.AVG)) %>%
+# Compute group averages safely without eval/parse
+mydata.df <- log2.cpm.filtered.norm.df %>%
+  mutate(
+    male.AVG   = rowMeans(select(., all_of(male))),
+    female.AVG = rowMeans(select(., all_of(female))),
+    LogFC      = male.AVG - female.AVG
+  ) %>%
   mutate_if(is.numeric, round, 2)
 
 ### 18,972 genes table ###

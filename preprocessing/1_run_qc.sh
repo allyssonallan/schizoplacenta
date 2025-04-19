@@ -1,6 +1,11 @@
-!/bin/bash
+#!/bin/bash
 
 fastqc *.gz -t 4
+
+if [[ ! "$filename" =~ ^[A-Za-z0-9_-]+_R[12]_001\.fastq\.gz$ ]]; then
+    echo "Invalid filename: $filename" >&2
+    exit 1
+fi
 
 # Loop through all PE files
 for file in *_R1_001.fastq.gz; do
