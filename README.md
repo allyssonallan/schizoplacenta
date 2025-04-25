@@ -1,6 +1,6 @@
 # schizoplacenta
 
-A reproducible pipeline for analyzing placenta transcriptome data to investigate sex differences and neurodevelopmental outcomes (cognition, language, and motor skills). This repository accompanies the study “coming soon...” (available soon).
+A reproducible pipeline for analyzing placenta transcriptome data to investigate sex differences and neurodevelopmental outcomes (cognition, language, and motor skills). This repository accompanies the study (available soon).
 
 Project structure
 -----------------
@@ -67,8 +67,8 @@ Analysis overview
 
 Citation
 --------
-Please cite “coming soon". 
+ “Coming soon". 
 
 License
 -------
-Need to decide the license
+Coming soon.
