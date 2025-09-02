@@ -1,5 +1,6 @@
-### Load libraries ###
+#!/usr/bin/env Rscript
 
+#### imports ####
 library(dplyr)
 library(tximport)
 library(ensembldb)
@@ -21,28 +22,10 @@ library(grid)
 library(gtable)
 library(gridExtra)
 
-### set env ###
+#### preprocessing ####
 getwd()
-setwd("~/Documents/Dani/Transcriptoma/")
-
-### load meta and pseudoalignment data ###
+setwd("~/Documents/Danielle/Transcriptoma/")
 targets <- data.table::fread("0_TableCode.tsv")
-# Metadata validation
-required_cols <- c("mascgenRN", "masctransM1", "masctranscRN1", "masctransM", "masctranscRN")
-missing_cols <- setdiff(required_cols, names(targets))
-if (length(missing_cols) > 0) stop(paste("Metadata is missing required columns:", paste(missing_cols, collapse=", ")))
-# Validate path and sample columns
-path_cols <- required_cols[-1]
-for (col in path_cols) {
-  if (!is.character(targets[[col]])) stop(paste("Column", col, "must be character"))
-  if (any(is.na(targets[[col]]) | targets[[col]] == "")) stop(paste("Column", col, "contains empty or NA values"))
-}
-# Validate numeric metadata columns if present
-num_cols <- intersect(c("QuantCRN", "QuantLRN", "QuantQRN"), names(targets))
-for (col in num_cols) {
-  if (!is.numeric(targets[[col]])) stop(paste("Column", col, "must be numeric"))
-  if (any(is.na(targets[[col]]))) stop(paste("Column", col, "contains NA values"))
-}
 targetsnd <- targets[!duplicated(targets$mascgenRN), ]
 pathM <- file.path(targetsnd$masctransM1, "abundance.h5")
 pathRN <- file.path(targetsnd$masctranscRN1, "abundance.h5")
@@ -51,7 +34,7 @@ Tx <- transcripts(EnsDb.Hsapiens.v86, columns = c("tx_id", "gene_name"))
 Tx <- as_tibble(Tx)
 Tx <- dplyr::rename(Tx, target_id = tx_id)
 Tx <- dplyr::select(Tx, "target_id", "gene_name")
-Txi_gene <- tximport(
+Txi_gene <- tximport::tximport(
   c(pathM, pathRN),
   type = "kallisto",
   tx2gene = Tx,
@@ -60,7 +43,7 @@ Txi_gene <- tximport(
   ignoreTxVersion = TRUE
 )
 
-### proceed with normalization ###
+#### proceed with normalization ####
 sampleLabels <- c(targetsnd$masctransM, targetsnd$masctranscRN)
 myDGEList <- DGEList(Txi_gene$counts)
 cpm <- cpm(myDGEList)
@@ -101,10 +84,9 @@ targetsmean <- targets %>%
     QuantQRNmean = mean(QuantQRN, na.rm = TRUE)
   )
 targetsnd <- targetsmean[!duplicated(targetsmean$mascgenRN), ]
-#continuous
 targetsnd$cognitive_group <- ifelse(targetsnd$QuantCRNmean >= 90,
-                                    "typical",
-                                    "altered")
+                                    "TD",
+                                    "DD")
 targetsnd$cognitive_group <- factor(targetsnd$cognitive_group)
 group <- c(targetsnd$cognitive_group, targetsnd$cognitive_group)
 group <- factor(group)
@@ -115,28 +97,36 @@ sampleLabels <- c(targetsnd$masctransM, targetsnd$masctranscRN)
 pca.res <- prcomp(t(log2.cpm.filtered.norm),
                   scale. = F,
                   retx = T)
-pc.var <- pca.res$sdev ^ 2 # sdev^2 captures these eigenvalues from the PCA result
+pc.var <- pca.res$sdev ^ 2
 pc.per <- round(pc.var / sum(pc.var) * 100, 1)
 pca.res.df <- as_tibble(pca.res$x)
-pca.plot <- ggplot(pca.res.df) +
-  aes(
-    x = PC1,
-    y = PC2,
-    label = sampleLabels,
-    color = group
+compartment <- factor(
+  c(rep("maternal", nrow(targetsnd)), rep("fetal", nrow(targetsnd))),
+  levels = c("maternal", "fetal")
+)
+pca.res.df <- as_tibble(pca.res$x)
+pca.res.df$sample      <- sampleLabels
+pca.res.df$group       <- group
+pca.res.df$compartment <- compartment
+
+pca.plot <- ggplot(pca.res.df, aes(x = PC1, y = PC2)) +
+  geom_point(
+    aes(shape = compartment, color = group),
+    size = 3.5, stroke = 1.1, alpha = 0.95
   ) +
-  geom_point(size = 4) +
-  stat_ellipse() +
-  xlab(paste0("PC1 (", pc.per[1], "%", ")")) +
-  ylab(paste0("PC2 (", pc.per[2], "%", ")")) +
+  scale_shape_manual(values = c(maternal = 1, fetal = 16)) +
+  stat_ellipse(aes(color = group), linetype = "dashed", linewidth = 0.4) +
+  xlab(paste0("PC1 (", pc.per[1], "%)")) +
+  ylab(paste0("PC2 (", pc.per[2], "%)")) +
   coord_fixed() +
   theme_bw()
 
 p1 <- pca.plot
+
 ggplotly(pca.plot)
 
 
-### Filtered and normalized counts per million (CPM)
+#### Filtered and normalized counts per million (CPM) ####
 
 log2.cpm.filtered.norm.df <- log2.cpm.filtered.norm.df[!duplicated(names(log2.cpm.filtered.norm.df))]
 
@@ -174,7 +164,7 @@ datatable(mydata.df,
                          pageLength = 10,
                          lengthMenu = c("10", "25", "50", "100")))
 
-### Volcano plot
+#### Volcano plot ####
 library(gt)
 library(DT)
 library(plotly)
@@ -189,19 +179,14 @@ design <- model.matrix(~ groupcont)
 v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = FALSE)
 fit <- lmFit(v.DEGList.filtered.norm, design)
 ebFit <- eBayes(fit)
-myTopHits <- topTable(ebFit, adjust = "BH", coef = 2, number = 10000, sort.by = "logFC")
-myTopHits <- topTable(ebFit, adjust = "BH", coef = 3, number = 10000, sort.by = "logFC")
-
+myTopHits <- topTable(ebFit, adjust.method = "BH", coef = 2, number = Inf, lfc = 1, sort.by = "logFC")
 myTopHits.df <- myTopHits %>%
   as_tibble(rownames = "geneID")
 
 top_upregulated_genes <- myTopHits.df[order(-myTopHits.df$logFC), ][1:25, ]  # Top 25 upregulated
-#top_upregulated_genes <- myTopHits.df[order(-myTopHits.df$logFC), ][1:10, ]  # Top 25 upregulated
-#top_upregulated_genes <- myTopHits.df[order(myTopHits.df$adj.P.Val), ][1:25, ]  # Top 25 upregulated
 top_downregulated_genes <- myTopHits.df[order(myTopHits.df$logFC), ][1:25, ] # Top 25 downregulated
-#top_downregulated_genes <- myTopHits.df[order(myTopHits.df$logFC), ][1:10, ] # Top 25 downregulated
 top50_genes <- rbind(top_upregulated_genes, top_downregulated_genes)
-write.table(top50_genes, file = "Supp_3_Cog_top50_25up25down.tsv", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(top50_genes, file = "results_paper/Supp_3_Cog_top50_25up25down.tsv", sep = "\t", row.names = FALSE, col.names = TRUE)
 
 df_clean <- na.omit(top50_genes)
 df_clean <- df_clean[c("geneID", "logFC", "adj.P.Val")]
@@ -258,17 +243,11 @@ p2 <- vplot
 ggplotly(vplot)
 
 
-### DEG table
+#### DEG table ####
 
-results <- decideTests(
-  ebFit,
-  method = "global",
-  adjust.method = "BH",
-  p.value = 1e-10,
-  lfc = 3
-)
+results <- decideTests(ebFit, method = "global", adjust.method = "BH", p.value = 0.05)
 colnames(v.DEGList.filtered.norm$E) <- sampleLabels
-diffGenes <- v.DEGList.filtered.norm$E[results[, 1] != 0, ]
+diffGenes <- v.DEGList.filtered.norm$E[results[,1] != 0,]
 diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
 datatable(
   diffGenes.df,
@@ -283,70 +262,85 @@ datatable(
 ) %>%
   formatRound(columns = c(2:31), digits = 2)
 
-write.table(diffGenes.df, file = "3_Cog_DEG.tsv", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(diffGenes.df, file = "results_paper/Supp4_Cog_DEG.tsv", sep = "\t", row.names = FALSE, col.names = TRUE)
 
-
-
-### heatmap
+#### heatmap ####
 
 library(tidyverse)
 library(gplots)
 library(RColorBrewer)
 library(magick)
+library(ComplexHeatmap)
+library(ggplotify)
+library(circlize)
+library(patchwork)
+library(cowplot)
+library(limma)
 
-myheatcolors <- rev(brewer.pal(name = "RdBu", n = 11))
-clustRows <- hclust(as.dist(1 - cor(t(diffGenes), method = "pearson")), method =
-                      "complete") #cluster rows by pearson correlation
-clustColumns <- hclust(as.dist(1 - cor(diffGenes, method = "spearman")), method =
-                         "complete")
-module.assign <- cutree(clustRows, k = 2)
-module.color <- rainbow(length(unique(module.assign)), start = 0.1, end =
-                          0.9)
-module.color <- module.color[as.vector(module.assign)]
+results <- decideTests(ebFit, method = "global", adjust.method = "BH", p.value = 1e-3)
+colnames(v.DEGList.filtered.norm$E) <- sampleLabels
+diffGenes <- v.DEGList.filtered.norm$E[results[,1] != 0,]
+diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
+# #
+# # subset the expression matrix E using the same row order
 
-# Prepare the heatmap data
+clustRows <- hclust(as.dist(1 - cor(t(diffGenes), method = "pearson")), method = "complete") #cluster rows by pearson correlation
+clustColumns <- hclust(as.dist(1 - cor(diffGenes, method = "spearman")), method = "complete")
+col_hc <- clustColumns
+row_hc <- clustRows
+k <- 2
+row_cluster_id  <- cutree(row_hc, k = k)
+row_cluster_lab <- factor(paste0("C", row_cluster_id), levels = paste0("C", 1:k))
+cluster_pal <- c(C1 = "#F39C12", C2 = "#2E86C1")       # keep your cluster colors
+comp_pal    <- c(maternal = "#8C564B", fetal = "#17BECF")  # clearer, colorblind-safe-ish
+cog_pal     <- c(DD = "#E84A5F", TD = "#00A8E8")
+row_ha <- rowAnnotation(
+  Cluster = row_cluster_lab,
+  col = list(Cluster = cluster_pal),
+  annotation_legend_param = list(title = "Cluster")
+)
+nM <- nrow(targetsnd)         # maternal count
+nF <- nrow(targetsnd)         # fetal count
+compartment <- factor(c(rep("maternal", nM), rep("fetal", nF)), levels = c("maternal","fetal"))
+cog <- factor(c(targetsnd$cognitive_group, targetsnd$cognitive_group), levels = c("DD","TD"))
+col_ha <- HeatmapAnnotation(
+  Compartment = compartment,
+  Cognitive   = cog,
+  col = list(
+    Compartment = comp_pal,
+    Cognitive   = cog_pal
+  ),
+  annotation_name_side = "left",
+  gp = gpar(col = NA)
+)
+col_fun <- colorRamp2(c(-4, 0, 4), brewer.pal(11, "RdBu")[c(11, 6, 1)])
 diffGenes_scaled <- t(scale(t(diffGenes)))
-row_dend <- as.dendrogram(clustRows)
-col_dend <- as.dendrogram(clustColumns)
-cluster_labels <- ifelse(module.assign == 1, "1", "2")
-annotation_df <- data.frame(Gene = rownames(diffGenes), Cluster = cluster_labels)
-row_annotation <- rowAnnotation(Cluster = cluster_labels, col = list(Cluster = c("1" = "red", "2" = "blue")))
+ht <- Heatmap(
+  diffGenes_scaled,
+  name = "Z-score",
+  col  = col_fun,
+  cluster_rows    = as.dendrogram(row_hc),
+  cluster_columns = as.dendrogram(col_hc),
+  show_row_names  = FALSE,
+  show_column_names = TRUE,
+  column_names_rot  = 45,
+  top_annotation    = col_ha,
+  right_annotation  = row_ha,
+  row_split         = k,                          # numeric split
+  row_title         = paste0(" "),           # titles “C1”, “C2”
+  heatmap_legend_param = list(title = "Z-score"),
+  border = TRUE
+)
 
-heatmap <- Heatmap(diffGenes_scaled,
-                   name = "Expression",
-                   cluster_rows = row_dend,
-                   cluster_columns = col_dend,
-                   show_row_names = FALSE,
-                   show_column_names = TRUE,
-                   right_annotation = row_annotation,
-                   heatmap_legend_param = list(title = "Z-score"),
-                   row_names_gp = gpar(fontsize = 8),
-                   column_names_gp = gpar(fontsize = 10))
-
-heatmap_grob <- grid.grabExpr(draw(heatmap))
+heatmap_grob <- grid.grabExpr(draw(ht))
 heatmap_ggplot <- as.ggplot(heatmap_grob)
 print(heatmap_ggplot)
 
-p3 <- draw(heatmap, heatmap_legend_side = "right")
+p3 <- draw(ht, heatmap_legend_side = "right", merge_legends = TRUE)
+p3
 
-#######
-
-# topGeneCounts <- c(100, 250, 500, 750, 1000, 1500)
-# myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
-#
-# for (count in topGeneCounts) {
-#   genesData <- get(paste0("top", count, "UpregulatedGenes"))
-#   png(filename=paste0("heatmap_top", count, "_UpregulatedGenes.png"), width=800, height=600)
-#   heatmap.2(as.matrix(genesData),
-#             col=myheatcolors, scale='row', labRow=NA,
-#             density.info="none", trace="none",
-#             cexRow=1, cexCol=1, margins=c(5,10))
-#   dev.off() # Close the graphic device
-# }
-
-modulePick <- 2
-myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),]
-hrsub_up <- hclust(as.dist(1 - cor(t(myModule_up), method = "pearson")), method = "complete")
+#### gostplot ####
+module.assign <- cutree(clustRows, k = 2)
 
 library(limma)
 library(gplots) #for heatmaps
@@ -358,12 +352,16 @@ library(gprofiler2) #tools for accessing the GO enrichment results using g:Profi
 library(clusterProfiler) # provides a suite of tools for functional enrichment analysis
 library(msigdbr) # access to msigdb collections directly within R
 library(enrichplot) # great for making the standard GSEA enrichment plots
-gost.res_up <- gost(rownames(myModule_up), organism = "hsapiens", correction_method = "fdr")
-gostplot(gost.res_up, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
 
-p5 <- gostplot(gost.res_down, interactive = F, capped = T)
+modulePick <- 2
+myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),]
+hrsub_up <- hclust(as.dist(1 - cor(t(myModule_up), method = "pearson")), method = "complete")
+gost.res_up <- gost(rownames(myModule_up), organism = "hsapiens", correction_method = "fdr", significant = TRUE)
+gostplot(gost.res_up, interactive = T, capped = T)
 
-publish_gostplot(p5)
+p4 <- gostplot(gost.res_down, interactive = F, capped = T)
+
+publish_gostplot(p4)
 
 ### GO - enriched in normal cognitive category
 
@@ -376,26 +374,32 @@ gostplot(gost.res_down, interactive = T, capped = T) #set interactive=FALSE to g
 p5 <- gostplot(gost.res_down, interactive = F, capped = T)
 p5
 
-
-multi_gostres2 <- gost(query = list("altered" = rownames(myModule_up),
-                                    "typical" = rownames(myModule_down)),
+multi_gostres2 <- gost(query = list("DD" = rownames(myModule_up),
+                                    "TD" = rownames(myModule_down)),
                        organism = "hsapiens",
                        correction_method = "fdr",
-                       sources = c("KEGG", "REAC", "MIRNA","HP", "WP"),
+                       sources = c("KEGG", "REAC","HP", "WP"),
                        multi_query = TRUE)
+
+res_tbl <- multi_gostres2$result
+
+top20_ids <- res_tbl %>%
+  arrange(p_values) %>%
+  slice_head(n = 20) %>%
+  pull(term_id)
+
+
+
+# now plot with those highlights
+p6 <- gostplot(multi_gostres2, interactive = FALSE, capped = TRUE)
+p7 <- publish_gostplot(p6, highlight_terms = top20_ids)
+p7
 
 p6 <- gostplot(multi_gostres2, interactive = T, capped = T)
 p6
 p7 <- publish_gostplot(p6, highlight_terms = c(
-  "MIRNA:hsa-miR-16-5p",
-  "MIRNA:hsa-miR-16-5p",
-  "MIRNA:hsa-miR-155-5p",
-  "MIRNA:hsa-miR-30a-5p",
   "REAC:R-HSA-2262752",
   "REAC:R-HSA-8953897",
-  "MIRNA:hsa-miR-92a-3p",
-  "MIRNA:hsa-miR-21-5p",
-  "MIRNA:hsa-miR-17-5p",
   "WP:WP2005",
   "WP:WP2004",
   "REAC:R-HSA-9824446",
@@ -415,7 +419,7 @@ p7 <- publish_gostplot(p6, highlight_terms = c(
 ))
 p7
 
-### Fig2Cog ####
+#### Fig2Cog ####
 
 library(patchwork)
 
@@ -450,9 +454,9 @@ publish_gosttable(multi_gostres2,
                         highlight_terms = multi_gostres2$result[1:100,],
                         use_colors = TRUE,
                         show_columns = c("source", "term_name", "term_size"),
-                        filename = "top500.pdf")
+                        filename = "Supp5_Cog_top100.pdf")
 
-### general table
+#### general table ####
 
 hs_gsea_c2 <- msigdbr(species = "Homo sapiens",
                       category = "C2") %>% dplyr::select(gs_name, gene_symbol)
@@ -475,7 +479,7 @@ datatable(myGSEA.df_2,
 
 
 
-### Immuno table
+#### Immuno table ####
 
 hs_gsea_c7 <- msigdbr(species = "Homo sapiens", # change depending on species your data came from
                       category = "C7") %>% # choose your msigdb collection of interest
@@ -501,48 +505,154 @@ datatable(myGSEA.df_7,
   formatRound(columns=c(3:10), digits=2)
 
 
-### load libraries ###
+#### plot c2 ####
 library(ggplot2)
 library(enrichplot)
 library(ggraph)
 library(clusterProfiler)
 library(dplyr)
-library(viridis)  # for viridis color scales
+library(forcats)
+library(viridis)
+library(scales)
 
-top50_c2 <- top50_c2 %>%
-  mutate(logP = -log10(pvalue))
+# Build top25 up and down by NES (effect size)
+top_up <- myGSEA.df_2 %>% arrange(desc(NES)) %>% slice_head(n = 25)
+top_dn <- myGSEA.df_2 %>% arrange(NES)       %>% slice_head(n = 25)
+top50_c2 <- bind_rows(top_up, top_dn) %>%
+  mutate(
+    FDR = p.adjust,
+    mlogFDR = -log10(pmax(FDR, 1e-300)),
+    # leading edge count from "A/B/C" string:
+    leading_n = if_else(is.na(core_enrichment) | core_enrichment == "",
+                        0L, str_count(core_enrichment, "/") + 1L),
+    lead_pct = leading_n / setSize,
+    direction = if_else(NES >= 0, "Upregulated", "Downregulated"),
+    Description_clean = str_replace_all(Description, "_", " "),
+    Description_wrap  = str_wrap(Description_clean, width = 45)
+  ) %>%
+  group_by(direction) %>%
+  arrange(direction, desc(abs(NES))) %>%
+  mutate(order_y = row_number()) %>%
+  ungroup()
 
-p8 <- ggplot(top50_c2, aes(x = reorder(Description, NES), y = NES)) +
-  geom_segment(aes(xend = Description, y = 0, yend = NES, color = logP), size = 1) +
-  geom_point(aes(size = setSize, color = logP), alpha = 0.7) +
-  coord_flip() +
-  scale_color_viridis(option = "D", direction = -1) +
-  scale_size_continuous(range = c(2, 8)) +
-  labs(x = "Gene Set",
-       y = "Normalized Enrichment Score (NES)",
-       color = "-log10(p-value)",
-       size = "Set size",
-       title = "GSEA results for curated gene sets - c2",
-       subtitle = "Cognitive domain") +
+# choose a sparse set to label
+to_label <- top50_c2 %>%
+  group_by(direction) %>%
+  slice_max(order_by = abs(NES), n = 6) %>%
+  pull(Description_wrap)
+
+p8 <- ggplot(top50_c2,
+             aes(x = NES, y = fct_reorder(Description_wrap, order_y))) +
+  # lollipop
+  geom_segment(aes(x = 0, xend = NES,
+                   yend = fct_reorder(Description_wrap, order_y),
+                   color = mlogFDR)) +
+  geom_point(aes(size = lead_pct, color = mlogFDR), alpha = 0.85) +
+  geom_vline(xintercept = 0, linewidth = 0.4, linetype = "solid", color = "grey40") +
+  geom_vline(xintercept = c(-1.5, 1.5), linewidth = 0.3, linetype = "dashed", color = "grey70") +
+  scale_color_viridis_c(name = expression(-log[10]("FDR")), option = "D", direction = -1) +
+  scale_size_continuous(name = "Leading-edge fraction *") +
+  labs(
+    x = "Normalized Enrichment Score (NES)",
+    y = NULL,
+    title = "GSEA results for curated gene sets - c2",
+    subtitle = "Cognitive domain"
+  ) +
   theme_minimal(base_size = 12) +
-  theme(axis.text.y = element_text(size = 8))
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(size = 8),
+    strip.text.y = element_text(size = 11),
+    legend.position = "right"
+  )
 
+p8 <- p8 +
+  labs(
+    caption = paste0(
+      "n = ", nrow(top50_c2), " gene sets; vertical lines at NES = ±1.5\n",
+      "*Leading-edge fraction = proportion of genes in the set that actually drive the enrichment score.\n",
+      "For example, 60% means that 60% of the genes in that pathway are enriched at the top (or bottom) of the ranked list."
+    )
+  )
+
+p8
 # Save the combined figure
-ggsave("results_paper/Supp4_Cog_GSEA_c2.png",
+ggsave("results_paper/Supp5_Cog_GSEA_c2.png",
        p8,
        width = 300,
        height = 300,
        units = "mm",
-       dpi = 400)
-ggsave("results_paper/Supp4_Cog_GSEA_c2.tiff",
+       dpi = 400,
+       bg = "white")
+ggsave("results_paper/Supp5_Cog_GSEA_c2.tiff",
        p8,
        width = 300,
        height = 300,
        units = "mm",
-       dpi = 400)
+       dpi = 400,
+       bg = "white")
 
+#### plot c7 ####
+top_up <- myGSEA.df_7 %>% arrange(desc(NES)) %>% slice_head(n = 25)
+top_dn <- myGSEA.df_7 %>% arrange(NES)       %>% slice_head(n = 25)
+top50_c7 <- bind_rows(top_up, top_dn) %>%
+  mutate(
+    FDR = p.adjust,
+    mlogFDR = -log10(pmax(FDR, 1e-300)),
+    # leading edge count from "A/B/C" string:
+    leading_n = if_else(is.na(core_enrichment) | core_enrichment == "",
+                        0L, str_count(core_enrichment, "/") + 1L),
+    lead_pct = leading_n / setSize,
+    direction = if_else(NES >= 0, "Upregulated", "Downregulated"),
+    Description_clean = str_replace_all(Description, "_", " "),
+    Description_wrap  = str_wrap(Description_clean, width = 45)
+  ) %>%
+  group_by(direction) %>%
+  arrange(direction, desc(abs(NES))) %>%
+  mutate(order_y = row_number()) %>%
+  ungroup()
 
+# choose a sparse set to label
+to_label <- top50_c7 %>%
+  group_by(direction) %>%
+  slice_max(order_by = abs(NES), n = 6) %>%
+  pull(Description_wrap)
 
+p9 <- ggplot(top50_c7,
+             aes(x = NES, y = fct_reorder(Description_wrap, order_y))) +
+  # lollipop
+  geom_segment(aes(x = 0, xend = NES,
+                   yend = fct_reorder(Description_wrap, order_y),
+                   color = mlogFDR)) +
+  geom_point(aes(size = lead_pct, color = mlogFDR), alpha = 0.85) +
+  geom_vline(xintercept = 0, linewidth = 0.4, linetype = "solid", color = "grey40") +
+  geom_vline(xintercept = c(-1.5, 1.5), linewidth = 0.3, linetype = "dashed", color = "grey70") +
+  scale_color_viridis_c(name = expression(-log[10]("FDR")), option = "D", direction = -1) +
+  scale_size_continuous(name = "Leading-edge fraction *") +
+  labs(
+    x = "Normalized Enrichment Score (NES)",
+    y = NULL,
+    title = "GSEA results for curated gene sets - c7",
+    subtitle = "Cognitive domain"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(size = 8),
+    strip.text.y = element_text(size = 11),
+    legend.position = "right"
+  )
+
+p9 <- p9 +
+  labs(
+    caption = paste0(
+      "n = ", nrow(top50_c2), " gene sets; vertical lines at NES = ±1.5\n",
+      "*Leading-edge fraction = proportion of genes in the set that actually drive the enrichment score.\n",
+      "For example, 60% means that 60% of the genes in that pathway are enriched at the top (or bottom) of the ranked list."
+    )
+  )
+
+p9
 # Sort for the top upregulated (highest NES) and downregulated (lowest NES) gene sets
 top_upregulated <- myGSEA.df_7[order(-myGSEA.df_7$NES), ][1:25, ]  # Top 25 upregulated
 top_downregulated <- myGSEA.df_7[order(myGSEA.df_7$NES), ][1:25, ] # Top 25 downregulated
@@ -551,36 +661,21 @@ top50_immune <- rbind(top_upregulated, top_downregulated)
 top50_immune <- top50_immune %>%
   mutate(logP = -log10(pvalue))
 
-p9 <- ggplot(top50_immune, aes(x = reorder(Description, NES), y = NES)) +
-  geom_segment(aes(xend = Description, y = 0, yend = NES, color = logP), size = 1) +
-  geom_point(aes(size = setSize, color = logP), alpha = 0.7) +
-  coord_flip() +
-  scale_color_viridis(option = "D", direction = -1) +
-  scale_size_continuous(range = c(2, 8)) +
-  labs(x = "Gene Set",
-       y = "Normalized Enrichment Score (NES)",
-       color = "-log10(p-value)",
-       size = "Set size",
-       title = "GSEA results for immune curated gene sets - c7",
-       subtile = "Cognitive domain") +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.y = element_text(size = 8))
-
 # Save the combined figure
-ggsave("results_paper/Supp5_Cog_GSEA_immune_c7.png",
+ggsave("results_paper/Supp6_Cog_GSEA_immune_c7.png",
        p9,
        width = 500,
        height = 300,
        units = "mm",
        dpi = 400)
-ggsave("results_paper/Supp5_Cog_GSEA_immune_c7.tiff",
+ggsave("results_paper/Supp6_Cog_GSEA_immune_c7.tiff",
        p9,
        width = 500,
        height = 300,
        units = "mm",
        dpi = 400)
 
-###  Nat Comm 2023 - Supp1 - 56 genes ###
+#### Nat Comm 2023 - Supp1 - 56 genes ####
 
 schizogenes <- c("CD14", "CENPM", "CRTC2", "DDX28", "ESAM", "GALNT10", "GLTP", "NRGN", "NUDT1", "RNF38",
                  "RP5_1148A213", "RPS17", "SLC25A3", "TMBIM6", "DGCR8", "TAC3", "WNT7", "IL-2R",
@@ -590,7 +685,17 @@ schizogenes <- c("CD14", "CENPM", "CRTC2", "DDX28", "ESAM", "GALNT10", "GLTP", "
                  "ATP5MGP8", "ATP5F1B", "P2RX4", "CYP19A1", "ATP13A1", "IRF3", "ATF4", "HSPE1",
                  "STAB1", "BAP1", "FXR1", "GAB1", "TRIM8", "TRIM8-DT", "EIF5", "FURIN", "MAPK3", "SREBP2")
 
-### PNAS 2021 - PlacPRS1 - 66 genes ###
+filtered_diffGenes.df <- diffGenes.df[diffGenes.df$geneID %in% schizogenes, ]
+
+datatable(filtered_diffGenes.df,
+          extensions = c('KeyTable', 'FixedHeader'),
+          caption = 'Filtered Schizo DEGs in samples',
+          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c(10, 25, 50, 100))) %>%
+  formatRound(columns = 2:31, digits = 2)
+
+write.table(filtered_diffGenes.df, file = "results_paper/Supp12_GWAS_Schizo_Cog.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+#### PNAS 2021 - PlacPRS1 - 66 genes ####
 schizogenes2 <- c("ACO2", "ALKBH5", "ARHGAP1", "ARL6IP4", "ARPC3", "ATF4", "ATP2A2",
                   "ATPAF2", "BZW1", "CCDC25", "CLK1", "CLUH", "CNOT1", "CNOT7",
                   "CREB3L2", "CYB5R3", "DMTF1", "DPP4", "EFHD1", "ENO1", "ERRFI1",
@@ -609,4 +714,4 @@ datatable(filtered_diffGenes.df,
           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c(10, 25, 50, 100))) %>%
   formatRound(columns = 2:31, digits = 2)
 
-write.table(filtered_diffGenes.df, file = "5_PlacPRS1_Schizo_DEGs.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(filtered_diffGenes.df, file = "results_paper/Supp13_PlacPRS1_Schizo.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
