@@ -1,10 +1,14 @@
 # schizoplacenta
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17333992.svg)](https://doi.org/10.5281/zenodo.17333992)
+
 A reproducible pipeline for analyzing placenta transcriptome data to investigate sex differences and neurodevelopmental outcomes (cognition, language, and motor skills). This repository accompanies the study (available soon).
 
 Project structure
+
 -----------------
-```
+
+```bash
 .
 ├── preprocessing
 │   ├── 1_run_qc.sh          # FASTQ quality control using FastQC & MultiQC
@@ -27,7 +31,9 @@ Project structure
 ```
 
 Prerequisites
+
 -------------
+
 - Unix-like environment (Linux or macOS)
 - R (>= 4.0) with the following packages:
   - data.table, dplyr, tximport, ensembldb, EnsDb.Hsapiens.v86, edgeR, limma, sva
@@ -40,35 +46,40 @@ Prerequisites
 `Note: GSEA, GSVA, gprofiler2, msigdbr should have a network available to proceed with the multiple queries.`
 
 Usage
+
 -----
+
 1. Preprocessing:
+
    ```bash
+
    cd preprocessing
    ./1_run_qc.sh        # Generate raw QC reports
    ./2_run_kallisto.sh  # Build index and run pseudoalignment
+   
    ```
+
 2. Differential expression & downstream analysis:
    - Edit the working directory (`setwd(...)`) at the top of each `.R` script or launch R in the project root.
    - Run the R scripts in numerical order:
+
      ```bash
+
      Rscript 1_Sex.R
      Rscript 2_0_Cog.R
      # ... through 7_Cog_WGCNA.R
+
      ```
+
    - Outputs (plots, tables) will be saved under `results_paper/`.
 
 Analysis overview
+
 -----------------
+
 - **1_Sex.R**: Sex-based differential expression analysis, PCA, volcano plots, heatmaps, and enrichment (GSEA, GO).
 - **2*_*.R**, **3*_*.R**, **4*_*.R**: Parallel pipelines for cognition, language, and motor outcomes, each in global, fetal, and maternal contexts.
 - **5_Intersection.R**: Identifies overlapping DEGs across outcome categories.
 - **6_Cog_Heatmaps.R**: Generates detailed heatmaps for cognition-related DEGs.
 - **7_Cog_WGCNA.R**: Constructs co-expression modules, correlates modules with cognitive metrics, and performs network visualization.
 
-Citation
---------
- “Coming soon". 
-
-License
--------
-Coming soon.
