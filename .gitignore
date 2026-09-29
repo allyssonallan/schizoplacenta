@@ -1,3 +1,8 @@
 .DS_Store
 */.DS_Store
 .R*
+!/R/
+results_revision/
+*.rds
+*.h5
+*.RData
