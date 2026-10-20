@@ -6,3 +6,13 @@ results_revision/
 *.rds
 *.h5
 *.RData
+# data that must not be committed: sample table with participant codes and Bayley scores, kallisto outputs, MSigDB exports, results
+0_TableCode*.tsv
+*/abundance.h5
+*/abundance.tsv
+*/run_info.json
+*.gmt
+msigdb_*.tsv
+results_revision/
+gsea_parts/
+__pycache__/

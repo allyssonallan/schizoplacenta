@@ -64,9 +64,17 @@ gs$C2CP  <- read_gmt(file.path(ROOT, "c2.cp.v7.1.symbols.gmt"))
 gs$C2ALL <- read_gmt(file.path(ROOT, "c2.all.v7.1.symbols.gmt"))
 for (cc in c("C7", "C5")) {  # optional exports from msigdbr (see response letter)
   f <- file.path(ROOT, paste0("msigdb_", cc, ".tsv"))
-  if (file.exists(f)) { x <- fread(f); if (cc == "C5") x <- x[grepl("HPO", gs_subcat)]; gs[[if (cc == "C5") "HP" else cc]] <- split(x$gene_symbol, x$gs_name) }
+  if (file.exists(f)) {
+    x <- fread(f)
+    if (cc == "C5") { gs$HP <- split(x[grepl("HPO", gs_subcat)]$gene_symbol, x[grepl("HPO", gs_subcat)]$gs_name); c5 <- x } else gs[[cc]] <- split(x$gene_symbol, x$gs_name)
+  }
 }
-ext <- fread(file.path(ROOT, "reviewer2_yellow_revision_2026-09-08", "tables", "R2_external_gene_sets.tsv"))
+# over-representation sources (g:Profiler-like, Figs. S4/S7/S10): GO BP/CC/MF and HPO from the C5 export, KEGG/Reactome/WikiPathways/PID/BioCarta from C2:CP
+ora_sets <- list()
+if (exists("c5")) for (sc in c("GO:BP", "GO:CC", "GO:MF", "HPO")) { y <- c5[gs_subcat == sc]; ora_sets[[sub("HPO", "HP", sc)]] <- split(y$gene_symbol, y$gs_name) }
+for (src in c("KEGG", "REACTOME", "PID", "BIOCARTA")) ora_sets[[sub("REACTOME", "REAC", src)]] <- gs$C2CP[grepl(paste0("^", src, "_"), names(gs$C2CP))]
+extf <- file.path(ROOT, "data", "external_gene_sets.tsv")
+ext <- fread(extf)
 extsets <- split(ext$gene, ext$gene_set)
 # lists used in the original manuscript (Supplementary Tables 12-13)
 extsets[["SCZ GWAS placenta-implicated (Ursini 2023 S1; 56)"]] <- c("CD14","CENPM","CRTC2","DDX28","ESAM","GALNT10","GLTP","NRGN","NUDT1","RNF38","RP5_1148A213","RPS17","SLC25A3","TMBIM6","DGCR8","TAC3","WNT7","IL-2R","LINC02050","WDR6","XXcos-LUCA16.1","RP4-555D20.2","RP4-555D20.1","LINC02484","RP3-407E4.3","RP5-1148A21.3","RP4-778K6.3","MIR4688","VSIG2","ESAM-AS1","TMTC1","RILPL2","GPR135","CTD-2574D22.3","CIAO2B","RP11-818O24.3","MIR138-1","CUL7","ATP5MGP8","ATP5F1B","P2RX4","CYP19A1","ATP13A1","IRF3","ATF4","HSPE1","STAB1","BAP1","FXR1","GAB1","TRIM8","TRIM8-DT","EIF5","FURIN","MAPK3","SREBP2")

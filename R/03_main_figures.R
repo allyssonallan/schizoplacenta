@@ -27,14 +27,14 @@ domain_figure <- function(d, fn, letter_title) {
   ha <- HeatmapAnnotation(Face = ord$face, Group = ord[[grp]], col = list(Face = pal_face, Group = pal_grp), annotation_name_side = "left", annotation_name_gp = gpar(fontsize = 9), simple_anno_size = unit(3, "mm"), annotation_legend_param = list(Face = list(title_gp = gpar(fontsize = 9, fontface = "bold"), labels_gp = gpar(fontsize = 8), labels = c("maternal-facing   ", "fetal-facing   ")), Group = list(title_gp = gpar(fontsize = 9, fontface = "bold"), labels_gp = gpar(fontsize = 8))))
   ht <- Heatmap(mat, name = "Z-score", col = colorRamp2(c(-3, 0, 3), c("#2166AC", "white", "#B2182B")), cluster_columns = FALSE, column_split = factor(ifelse(ord$face == "fetal", "fetal-facing", "maternal-facing"), levels = c("maternal-facing", "fetal-facing")), show_row_names = FALSE, column_names_gp = gpar(fontsize = 7), top_annotation = ha, row_title = "Top 100 fetal-facing DD-vs-TD genes", row_title_gp = gpar(fontsize = 9), column_title_gp = gpar(fontsize = 9), heatmap_legend_param = list(title_gp = gpar(fontsize = 9, fontface = "bold"), labels_gp = gpar(fontsize = 8)))
   pd <- ggplot() + annotation_custom(grid.grabExpr(draw(ht, merge_legends = TRUE, padding = unit(c(1, 1, 1, 1), "mm")), width = unit(7.6, "in"), height = unit(7.6, "in"))) + theme_void()
-  # enrichment (camera C2:CP), fetal & maternal-facing, top 12 by FDR each
-  ce <- cam[domain == DOM[d] & model == "primary" & collection == "C2CP" & contrast %in% c("fetal", "maternal")]
-  ce <- ce[order(contrast, FDR)][, head(.SD, 12), by = contrast]
+  # enrichment: pre-ranked GSEA (MSigDB C2 canonical pathways), fetal & maternal-facing, top 12 by FDR (then |NES|) each
+  ce <- gsea[domain == DOM[d] & model == "primary" & collection == "C2CP" & contrast %in% c("fetal", "maternal")]
+  ce <- ce[order(contrast, FDR, -abs(NES))][, head(.SD, 12), by = contrast]
   ce[, label := clean_set(gene_set)]; ce[, contrast := factor(ifelse(contrast == "fetal", "Fetal-facing DD vs TD", "Maternal-facing DD vs TD"), levels = c("Fetal-facing DD vs TD", "Maternal-facing DD vs TD"))]
-  ce[, signed := ifelse(Direction == "Up", 1, -1) * -log10(FDR)]
-  pe <- ggplot(ce, aes(signed, reorder(paste(contrast, label), signed))) + geom_segment(aes(x = 0, xend = signed, yend = reorder(paste(contrast, label), signed), colour = Direction), linewidth = 0.5) + geom_point(aes(size = NGenes, colour = Direction)) +
+  ce[, sig := ifelse(FDR < 0.05, "FDR < 0.05", "FDR >= 0.05")]
+  pe <- ggplot(ce, aes(NES, reorder(paste(contrast, label), NES))) + geom_segment(aes(x = 0, xend = NES, yend = reorder(paste(contrast, label), NES), colour = Direction), linewidth = 0.5) + geom_point(aes(size = NGenes, colour = Direction, alpha = sig)) +
     facet_wrap(~contrast, scales = "free_y", ncol = 1) + scale_y_discrete(labels = function(x) sub("^[^ ]+-facing DD vs TD ", "", x)) + scale_colour_manual(values = c(Up = "#C43C39", Down = "#2C7FB8"), name = "Direction in DD") +
-    scale_size_continuous(range = c(1.5, 4.5), name = "Genes") + geom_vline(xintercept = 0, colour = "grey60") + labs(x = expression("signed "-log[10]~"FDR (competitive gene-set test)"), y = NULL) + theme_pub(10) + theme(axis.text.y = element_text(size = 8.5, lineheight = 0.85), legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "mm"), panel.spacing = unit(6, "mm"))
+    scale_alpha_manual(values = c(`FDR < 0.05` = 1, `FDR >= 0.05` = 0.35), name = NULL) + scale_size_continuous(range = c(1.5, 4.5), name = "Genes") + geom_vline(xintercept = 0, colour = "grey60") + labs(x = "Normalized enrichment score (GSEA)", y = NULL) + theme_pub(10) + theme(axis.text.y = element_text(size = 8.5, lineheight = 0.85), legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "mm"), panel.spacing = unit(6, "mm"))
   top <- (pa + pb + pc) + plot_layout(widths = c(1, 1, 0.9))
   fig <- (top / ((pd | pe) + plot_layout(widths = c(1.2, 1)))) + plot_layout(heights = c(0.9, 1.6)) + plot_annotation(tag_levels = "a", title = letter_title, theme = theme(plot.title = element_text(size = 11, face = "bold")))
   save3(fig, fn, 14, 13)
