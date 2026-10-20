@@ -73,7 +73,7 @@ for (cc in c("C7", "C5")) {  # optional exports from msigdbr (see response lette
 ora_sets <- list()
 if (exists("c5")) for (sc in c("GO:BP", "GO:CC", "GO:MF", "HPO")) { y <- c5[gs_subcat == sc]; ora_sets[[sub("HPO", "HP", sc)]] <- split(y$gene_symbol, y$gs_name) }
 for (src in c("KEGG", "REACTOME", "PID", "BIOCARTA")) ora_sets[[sub("REACTOME", "REAC", src)]] <- gs$C2CP[grepl(paste0("^", src, "_"), names(gs$C2CP))]
-extf <- file.path(ROOT, "data", "external_gene_sets.tsv")
+extf <- file.path("data", "external_gene_sets.tsv")
 ext <- fread(extf)
 extsets <- split(ext$gene, ext$gene_set)
 # lists used in the original manuscript (Supplementary Tables 12-13)
